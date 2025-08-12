@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/png" href="{{ url_for('static', filename='Logo.png') }}">	
+<title>BookMood - AI-Powered Book Recommendations</title>
+	
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='cleaned_styles.css') }}">
+</head>
+<body>
+    <!-- Animated Background - Exactly like TruthTyped -->
+    <div class="bg-animation">
+        <div class="bg-shape"></div>
+        <div class="bg-shape"></div>
+        <div class="bg-shape"></div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>📚 BookMood</h1>
+            <a href="{{ url_for('about') }}" class="get-book-btn">About</a>		
+	    <p style="margin-bottom: 20px;"></p>
+            <p>Discover your perfect read based on how you're feeling. Our AI analyzes your mood and recommends books that match your emotional state.</p>
+        </div>
+        
+        <div class="content">
+            <div class="input-section">
+                <label class="input-label" for="mood">Tell me your mood</label>
+                <div class="input-group">
+                    <input 
+                        id="mood" 
+                        class="mood-input" 
+                        placeholder="e.g., happy, melancholic, adventurous..." 
+                        autocomplete="off"
+                    />
+                    <button class="get-book-btn" onclick="getRecommendation()">
+                        Get Books
+                    </button>
+                </div>
+            </div>
+            
+            <div class="loading" id="loadingIndicator">
+                <div class="spinner"></div>
+                <div class="loading-text">Finding perfect books for your mood...</div>
+            </div>
+            
+            <div id="result" class="results"></div>
+        </div>
+    </div>
+
+    <script>
+        async function getRecommendation() {
+            const moodInput = document.getElementById('mood');
+            const mood = moodInput.value.trim().toLowerCase();
+            
+            if (!mood) {
+                // Visual feedback for empty input
+                moodInput.style.animation = 'shake 0.5s ease';
+                moodInput.style.borderColor = '#ef5350';
+                
+                setTimeout(() => {
+                    moodInput.style.animation = '';
+                    moodInput.style.borderColor = '';
+                }, 500);
+                
+                showError('Please enter your mood first!');
+                return;
+            }
+            
+            // Get DOM elements
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const resultDiv = document.getElementById('result');
+            const button = document.querySelector('.get-book-btn');
+            
+            // Start loading state
+            showLoading(loadingIndicator, resultDiv, button);
+            
+            try {
+                const response = await fetch('/suggest_book', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ mood }),
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Hide loading state
+                hideLoading(loadingIndicator, button);
+                
+                if (data.books_text) {
+                    displayResults(mood, data.books_text, resultDiv);
+                } else if (data.error) {
+                    showError(`Error: ${data.error}`);
+                } else {
+                    showError('No books found for this mood. Try a different emotion!');
+                }
+                
+            } catch (error) {
+                console.error('Fetch error:', error);
+                hideLoading(loadingIndicator, button);
+                showError('Failed to connect to the server. Please try again.');
+            }
+        }
+        
+        function showLoading(loadingIndicator, resultDiv, button) {
+            loadingIndicator.classList.add('show');
+            resultDiv.classList.remove('show');
+            
+            button.disabled = true;
+            button.innerHTML = 'Analyzing...';
+            button.style.opacity = '0.7';
+        }
+        
+        function hideLoading(loadingIndicator, button) {
+            loadingIndicator.classList.remove('show');
+            
+            button.disabled = false;
+            button.innerHTML = 'Get Books';
+            button.style.opacity = '1';
+        }
+        
+        // CRITICAL: Display full results without truncation
+        function displayResults(mood, booksText, resultDiv) {
+            resultDiv.innerHTML = `
+                <div class="mood-display">
+                    Books for mood: <span>${mood}</span>
+                </div>
+                <div class="book-content">
+                    <pre class="book-list-pre">${escapeHtml(booksText)}</pre>
+                </div>
+            `;
+            
+            resultDiv.classList.add('show');
+            
+            // Scroll to results
+            setTimeout(() => {
+                resultDiv.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start'
+                });
+            }, 300);
+        }
+        
+        function showError(message) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `
+                <div class="error-message show">
+                    ${message}
+                </div>
+            `;
+            resultDiv.classList.add('show');
+        }
+        
+        // Utility function to escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Enter key support
+        document.getElementById('mood').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                getRecommendation();
+            }
+        });
+        
+        // Enhanced input interactions
+        const moodInput = document.getElementById('mood');
+        
+        moodInput.addEventListener('focus', function() {
+            this.style.transform = 'translateY(-2px) scale(1.01)';
+        });
+        
+        moodInput.addEventListener('blur', function() {
+            this.style.transform = '';
+        });
+        
+        // Clear error styles on input
+        moodInput.addEventListener('input', function() {
+            this.style.borderColor = '';
+            this.style.animation = '';
+        });
+        
+        // Add custom shake animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes shake {
+                0%, 100% { transform: translateX(0); }
+                25% { transform: translateX(-8px); }
+                75% { transform: translateX(8px); }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // Page load animations
+        window.addEventListener('load', () => {
+            document.body.style.animation = 'fadeInUp 1s ease-out';
+        });
+        
+        // Smooth scrolling
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const results = document.getElementById('result');
+                if (results.classList.contains('show')) {
+                    results.classList.remove('show');
+                    document.getElementById('mood').focus();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
