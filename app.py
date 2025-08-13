@@ -1,31 +1,38 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import requests
-import os
-import json
 from functools import wraps
+from datetime import datetime
+import os
 
 app = Flask(__name__)
 app.secret_key = "super_secret_key_123"  # Change in production
 
-USERS_FILE = "users.json"
-API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDTScs9GuMG4pTAiD4sVDRts2U87-1Wmec")
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+# ---------------- In-memory "database" ---------------- #
+users = {}  # Virtual JSON storage
 BANNED_TITLES = [
     "The House in the Cerulean Sea",
     "The Midnight Library",
     "Pride and Prejudice"
 ]
 
+API_KEY = os.environ.get("GEMINI_API_KEY")  # Set in Render secrets
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+
 # ---------------- Helper Functions ---------------- #
 def load_users():
-    if os.path.exists(USERS_FILE):
-        with open(USERS_FILE, "r") as f:
-            return json.load(f)
-    return {}
+    global users
+    return users
 
-def save_users(users):
-    with open(USERS_FILE, "w") as f:
-        json.dump(users, f, indent=4)
+def save_users(data):
+    global users
+    users = data
+
+def ensure_user(users_data, username):
+    if username not in users_data:
+        users_data[username] = {"password": "", "shelves": []}
+    elif "shelves" not in users_data[username]:
+        users_data[username]["shelves"] = []
+    return users_data
 
 def login_required(f):
     @wraps(f)
@@ -34,6 +41,7 @@ def login_required(f):
             return redirect(url_for("login_route"))
         return f(*args, **kwargs)
     return decorated_function
+
 # ---------------- Routes ---------------- #
 @app.route("/")
 @login_required
@@ -48,33 +56,31 @@ def about():
 @app.route("/shelves")
 @login_required
 def shelves():
-    return render_template("shelves.html", username=session["username"])
-
-@app.route("/challenges")
-@login_required
-def challenges():
-    return render_template("challenges.html")
+    users_data = load_users()
+    users_data = ensure_user(users_data, session["username"])
+    shelves_data = users_data[session["username"]]["shelves"]
+    return render_template("shelves.html", username=session["username"], shelves=shelves_data)
 
 @app.route("/badges")
 @login_required
 def badges():
     return render_template("badges.html", username=session["username"])
 
-# ---------- Authentication Routes ---------- #
+# ---------------- Authentication Routes ---------------- #
 @app.route("/login", methods=["GET", "POST"])
 def login_route():
     if request.method == "POST":
         username = request.form["username"].strip()
         password = request.form["password"].strip()
 
-        users = load_users()
-        user = users.get(username)
-        stored = user.get("password", "") if isinstance(user, dict) else user if isinstance(user, str) else ""
+        users_data = load_users()
+        user = users_data.get(username)
+        stored = user.get("password", "") if isinstance(user, dict) else ""
 
-        if username in users and stored == password:
-            users = ensure_user(users, username)
-            users[username]["password"] = password
-            save_users(users)
+        if username in users_data and stored == password:
+            users_data = ensure_user(users_data, username)
+            users_data[username]["password"] = password
+            save_users(users_data)
             session["username"] = username
             return redirect(url_for("home"))
         else:
@@ -87,33 +93,34 @@ def signup():
         username = request.form["username"].strip()
         password = request.form["password"].strip()
 
-        users = load_users()
-        if username in users:
+        users_data = load_users()
+        if username in users_data:
             return render_template("signup.html", error="Username already exists")
 
-        users = ensure_user(users, username)
-        users[username]["password"] = password
-        save_users(users)
+        users_data = ensure_user(users_data, username)
+        users_data[username]["password"] = password
+        save_users(users_data)
         session["username"] = username
         return redirect(url_for("home"))
 
     return render_template("signup.html")
+
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for("login"))
+    return redirect(url_for("login_route"))
 
-# ---------- Book Suggestion Route ---------- #
+# ---------------- Book Suggestion Route ---------------- #
 @app.route("/suggest_book", methods=["POST"])
 @login_required
 def suggest_book():
-    data = request.get_json()
+    data = request.get_json() or {}
     mood = data.get("mood", "").strip()
     if not mood:
         return jsonify({"error": "Mood not provided"}), 400
 
     prompt = f"""
-    You are a creative and diverse mood-based book recommender.
+You are a creative and diverse mood-based book recommender.
 
     The user's mood is: {mood.upper()}.
 
@@ -130,25 +137,36 @@ def suggest_book():
     6. Make sure the recommendations are varied in setting, style, or author.
     7. Suggest a book for me with the following details: 
 
+"""
 
-    """
-
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
     headers = {"Content-Type": "application/json"}
     body = {"contents": [{"parts": [{"text": prompt}]}]}
 
     try:
-        response = requests.post(f"{url}?key={API_KEY}", headers=headers, json=body)
-        data = response.json()
+        resp = requests.post(f"{GEMINI_URL}?key={API_KEY}", headers=headers, json=body, timeout=30)
+        if resp.status_code != 200:
+            return jsonify({"error": f"Gemini API error {resp.status_code}"}), 500
 
-        if response.status_code == 200 and "candidates" in data:
-            books_text = data["candidates"][0]["content"]["parts"][0]["text"]
-            return jsonify({"books_text": books_text})
-        else:
-            return jsonify({"error": "Failed to get recommendations"}), 500
+        data = resp.json()
+        books_text = data["candidates"][0]["content"]["parts"][0]["text"]
 
+        # Optional: save to shelves
+        users_data = load_users()
+        users_data = ensure_user(users_data, session["username"])
+        entry = {
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "mood": mood,
+            "books_text": books_text,
+            "id": int(datetime.now().timestamp() * 1000)
+        }
+        users_data[session["username"]]["shelves"].insert(0, entry)
+        users_data[session["username"]]["shelves"] = users_data[session["username"]]["shelves"][:50]
+        save_users(users_data)
+
+        return jsonify({"books_text": books_text, "saved": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ---------------- Run App ---------------- #
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
