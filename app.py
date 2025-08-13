@@ -1,4 +1,4 @@
-from flask import Flask, render_Template, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import requests
 from functools import wraps
 from datetime import datetime
@@ -46,12 +46,12 @@ def login_required(f):
 @app.route("/")
 @login_required
 def home():
-    return render_Template("index.html", username=session["username"])
+    return render_template("index.html", username=session["username"])
 
 @app.route("/about")
 @login_required
 def about():
-    return render_Template("about.html", username=session["username"])
+    return render_template("about.html", username=session["username"])
 
 @app.route("/shelves")
 @login_required
@@ -59,12 +59,12 @@ def shelves():
     users_data = load_users()
     users_data = ensure_user(users_data, session["username"])
     shelves_data = users_data[session["username"]]["shelves"]
-    return render_Template("shelves.html", username=session["username"], shelves=shelves_data)
+    return render_template("shelves.html", username=session["username"], shelves=shelves_data)
 
 @app.route("/badges")
 @login_required
 def badges():
-    return render_Template("badges.html", username=session["username"])
+    return render_template("badges.html", username=session["username"])
 
 # ---------------- Authentication Routes ---------------- #
 @app.route("/login", methods=["GET", "POST"])
@@ -84,8 +84,8 @@ def login_route():
             session["username"] = username
             return redirect(url_for("home"))
         else:
-            return render_Template("login.html", error="Invalid username or password")
-    return render_Template("login.html")
+            return render_template("login.html", error="Invalid username or password")
+    return render_template("login.html")
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
@@ -95,7 +95,7 @@ def signup():
 
         users_data = load_users()
         if username in users_data:
-            return render_Template("signup.html", error="Username already exists")
+            return render_template("signup.html", error="Username already exists")
 
         users_data = ensure_user(users_data, username)
         users_data[username]["password"] = password
@@ -103,7 +103,7 @@ def signup():
         session["username"] = username
         return redirect(url_for("home"))
 
-    return render_Template("signup.html")
+    return render_template("signup.html")
 
 @app.route("/logout")
 def logout():
