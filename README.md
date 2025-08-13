@@ -1,4 +1,4 @@
-# MoodBook
+# BookMood
 
 BookMood is an AI-powered book recommendation web app built with Flask that suggests books based on your current mood.
 
