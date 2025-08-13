@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login - BookMood</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='cleaned_styles.css') }}">
+    <style>
+        .login-box {
+            background: var(--glass-bg);
+            padding: 2rem;
+            border-radius: 16px;
+            max-width: 400px;
+            margin: auto;
+            margin-top: 10vh;
+            text-align: center;
+            box-shadow: var(--shadow-primary);
+        }
+        input {
+            width: 100%;
+            padding: 0.6rem;
+            margin: 0.5rem 0;
+            border-radius: 8px;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h1>🔐 Login</h1>
+        {% if error %}
+            <p id="error" style="color: red;">{{ error }}</p>
+        {% else %}
+            <p id="error" style="color: red;"></p>
+        {% endif %}
+        <form method="POST">
+            <input name="username" placeholder="Name" type="text" required>
+            <input name="password" placeholder="Password" type="password" required>
+            <button type="submit" class="get-book-btn">Login</button>
+        </form>
+        <p>Don’t have an account? <a href="{{ url_for('signup') }}">Sign Up</a></p>
+    </div>
+</body>
+</html>
