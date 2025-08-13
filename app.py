@@ -2,46 +2,73 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 import requests
 import os
 import json
+import re
 from functools import wraps
 from datetime import datetime
 
 app = Flask(__name__)
-
-# ---------------- Basic Config ---------------- #
-# In production, set this via environment variable
-app.secret_key = os.environ.get("BOOKMOOD_SECRET_KEY", "super_secret_key_123")
+app.secret_key = os.environ.get("SECRET_KEY", "super_secret_key_123")
 
 USERS_FILE = "users.json"
-
-# Prefer environment variable; fallback to the provided key for local dev
 API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDTScs9GuMG4pTAiD4sVDRts2U87-1Wmec")
-
-# Model endpoint (requests-style; same as your original code)
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
-# Titles you don't want to appear
-BANNED_TITLES = [
-    "The House in the Cerulean Sea",
-    "The Midnight Library",
-    "Pride and Prejudice"
-]
+BANNED_TITLES = {
+    "the house in the cerulean sea",
+    "the midnight library",
+    "pride and prejudice",
+}
 
 # ---------------- Helper Functions ---------------- #
 def load_users():
-    """Load simple user store from JSON file."""
-    if os.path.exists(USERS_FILE):
+    """
+    Load users.json, and support both old (username: password) and new structures.
+    If old structure found, convert it to new structure and save back.
+    """
+    if not os.path.exists(USERS_FILE):
+        return {}
+
+    try:
+        with open(USERS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return {}
+
+    # Detect legacy format: username -> string password
+    converted = False
+    if isinstance(data, dict):
+        for k, v in list(data.items()):
+            if not isinstance(v, dict):
+                # convert entry
+                pwd = v if isinstance(v, str) else ""
+                data[k] = {"password": pwd, "shelves": []}
+                converted = True
+            else:
+                # ensure 'shelves' exists
+                if "shelves" not in v:
+                    data[k]["shelves"] = []
+                    converted = True
+    if converted:
         try:
-            with open(USERS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+            with open(USERS_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception:
-            # If file is corrupted, start clean (or you can raise)
-            return {}
-    return {}
+            pass
+    return data
 
 def save_users(users):
-    """Persist user store to JSON file."""
-    with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(users, f, indent=4)
+    try:
+        with open(USERS_FILE, "w", encoding="utf-8") as f:
+            json.dump(users, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+def ensure_user(users, username):
+    if username not in users:
+        users[username] = {"password": "", "shelves": []}
+    elif "shelves" not in users[username]:
+        users[username]["shelves"] = []
+    return users
 
 def login_required(f):
     @wraps(f)
@@ -51,53 +78,193 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def try_parse_books_json(text):
-    """
-    Try to parse a JSON array/object out of the model's text response.
-    Returns: list[dict] | None
-    """
-    if not text:
+# ---------------- Parsing helpers ---------------- #
+def try_load_json(text):
+    try:
+        return json.loads(text)
+    except Exception:
         return None
 
-    # First, a straight JSON parse
-    try:
-        data = json.loads(text)
-        # Normalize to list
-        if isinstance(data, dict) and "recommendations" in data and isinstance(data["recommendations"], list):
-            return data["recommendations"]
-        if isinstance(data, list):
-            return data
-    except Exception:
-        pass
+def extract_json_array(text):
+    """
+    Highly forgiving extraction:
+    1. Try direct json.loads(text)
+    2. Find the largest [...] block and attempt to json.loads it
+    3. Find fenced ```json ... ``` blocks
+    4. Try to parse structured plaintext:
+       - Blocks like "Title: X\nAuthor: Y\nGenre: Z\nDescription: ..."
+       - Numbered lists: "1. Title — Author [Genre]\n   Description..."
+    Returns: list-of-dicts OR None
+    """
+    if not text or not isinstance(text, str):
+        return None
 
-    # If the model wrapped JSON in ```json ... ```
-    fence_start = text.find("```json")
-    if fence_start != -1:
-        fence_end = text.find("```", fence_start + 7)
-        if fence_end != -1:
-            fenced = text[fence_start + 7:fence_end].strip()
-            try:
-                data = json.loads(fenced)
-                if isinstance(data, dict) and "recommendations" in data and isinstance(data["recommendations"], list):
-                    return data["recommendations"]
-                if isinstance(data, list):
-                    return data
-            except Exception:
-                pass
+    # 1) direct load
+    parsed = try_load_json(text)
+    if isinstance(parsed, list):
+        return parsed
 
-    # Try to extract the largest bracketed JSON array
-    lb = text.find("[")
-    rb = text.rfind("]")
-    if lb != -1 and rb != -1 and rb > lb:
-        snippet = text[lb:rb+1]
-        try:
-            data = json.loads(snippet)
-            if isinstance(data, list):
-                return data
-        except Exception:
-            pass
+    # 2) fenced json blocks ```json ... ```
+    fence = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
+    if fence:
+        candidate = fence.group(1).strip()
+        parsed = try_load_json(candidate)
+        if isinstance(parsed, list):
+            return parsed
+
+    # 3) biggest [...] block
+    array_matches = re.findall(r"\[[\s\S]*?\]", text)
+    if array_matches:
+        # choose the longest candidate (most likely contains all objects)
+        best = max(array_matches, key=len)
+        parsed = try_load_json(best)
+        if isinstance(parsed, list):
+            return parsed
+
+    # 4) try to extract multiple object-like patterns 'Title: ... Author: ...'
+    blocks = re.split(r"\n\s*\n", text.strip())
+    results = []
+    for block in blocks:
+        # find title/author pairs in the block
+        title = None
+        author = None
+        genre = ""
+        description = ""
+
+        # Pattern: Title: <...>
+        m_title = re.search(r"Title\s*[:\-]\s*(.+)", block, re.IGNORECASE)
+        if m_title:
+            title = m_title.group(1).strip()
+
+        m_author = re.search(r"Author\s*[:\-]\s*(.+)", block, re.IGNORECASE)
+        if m_author:
+            author = m_author.group(1).strip()
+
+        m_genre = re.search(r"Genre\s*[:\-]\s*(.+)", block, re.IGNORECASE)
+        if m_genre:
+            genre = m_genre.group(1).strip()
+
+        m_desc = re.search(r"Description\s*[:\-]\s*([\s\S]+)", block, re.IGNORECASE)
+        if m_desc:
+            description = m_desc.group(1).strip()
+
+        if title and author:
+            results.append({
+                "title": title,
+                "author": author,
+                "genre": genre,
+                "description": description
+            })
+        else:
+            # try numbered list style like "1. Title — Author [Genre]\n   Description..."
+            lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
+            for i, ln in enumerate(lines):
+                m_num = re.match(r"^\d+\.\s*(.+)", ln)
+                if m_num:
+                    main = m_num.group(1)
+                    # split by ' — ' or '-' or ' - ' or ' by '
+                    parts = re.split(r"\s+—\s+|\s+-\s+|\s+by\s+", main, maxsplit=1)
+                    t = parts[0].strip() if parts else ""
+                    a = parts[1].strip() if len(parts) > 1 else ""
+                    # optionally extract genre in brackets
+                    g = ""
+                    gm = re.search(r"\[(.*?)\]", main)
+                    if gm:
+                        g = gm.group(1).strip()
+                    # description on next line(s)
+                    desc = ""
+                    if i + 1 < len(lines):
+                        # if next line is indented or not numeric, treat as description
+                        if not re.match(r"^\d+\.", lines[i + 1]):
+                            desc = lines[i + 1]
+                    if t and a:
+                        results.append({"title": t, "author": a, "genre": g, "description": desc})
+
+    if results:
+        return results
 
     return None
+
+def normalize_book_list(items):
+    """
+    Ensure we return a list of up to 3 book dicts with required keys.
+    Filter banned titles and normalize fields.
+    """
+    out = []
+    if not isinstance(items, list):
+        return out
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        title = (item.get("title") or "").strip()
+        author = (item.get("author") or "").strip()
+        genre = (item.get("genre") or "").strip()
+        description = (item.get("description") or item.get("desc") or "").strip()
+
+        if not title or not author:
+            continue
+        if title.lower() in BANNED_TITLES:
+            continue
+
+        out.append({
+            "title": title,
+            "author": author,
+            "genre": genre,
+            "description": description
+        })
+        if len(out) == 3:
+            break
+    return out
+
+# ---------------- Gemini call ---------------- #
+def gemini_recommend(mood):
+    prompt = f"""
+You are an expert mood-based book recommender.
+
+User mood: "{mood}".
+
+Return EXACTLY a JSON array with THREE objects.
+Each object MUST have keys: "title", "author", "genre", "description".
+Do NOT include markdown, extra text, or code fences. Only valid JSON array.
+
+Rules:
+- Titles in this banned list must NOT appear: {sorted(list(BANNED_TITLES))}
+- Prefer books available/known in India (not obscure out-of-print).
+- Avoid bestsellers and overexposed picks; aim for lesser-known but strong fits to the mood.
+- Description: 1–2 sentences on why this fits the mood.
+"""
+    headers = {"Content-Type": "application/json"}
+    body = {"contents": [{"parts": [{"text": prompt}]}]}
+
+    resp = requests.post(f"{GEMINI_URL}?key={API_KEY}", headers=headers, json=body, timeout=30)
+    if resp.status_code != 200:
+        raise RuntimeError(f"Gemini error: {resp.status_code} {resp.text}")
+
+    data = resp.json()
+    try:
+        raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+    except Exception:
+        raise RuntimeError("Unexpected Gemini response structure.")
+
+    # First try strict parse, then forgiving extraction
+    parsed = extract_json_array(raw_text)
+    if parsed:
+        books = normalize_book_list(parsed)
+        if books:
+            return books
+
+    # If parsing failed, try to salvage using more relaxed parsing and also let caller know raw_text
+    # Try to parse any JSON-like objects again with lower confidence
+    # create fallback by scanning for common Title/Author lines
+    fallback = extract_json_array(raw_text)  # second attempt (extract_json_array already forgiving)
+    if fallback:
+        books = normalize_book_list(fallback)
+        if books:
+            return books
+
+    # Last resort: try to parse lines like "1. Title — Author"
+    # (extract_json_array already handles numbered lists), so if still nothing, give helpful error
+    raise RuntimeError("Could not parse JSON from Gemini. Raw output included for debugging.\n\n" + raw_text)
 
 # ---------------- Routes ---------------- #
 @app.route("/")
@@ -113,7 +280,10 @@ def about():
 @app.route("/shelves")
 @login_required
 def shelves():
-    return render_template("shelves.html", username=session["username"])
+    users = load_users()
+    users = ensure_user(users, session["username"])
+    shelves_data = users[session["username"]]["shelves"]
+    return render_template("shelves.html", username=session["username"], shelves=shelves_data)
 
 @app.route("/challenges")
 def challenges():
@@ -127,38 +297,41 @@ def badges():
 # ---------- Authentication Routes ---------- #
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    # Ensure users file exists to avoid surprises on first run
-    if not os.path.exists(USERS_FILE):
-        save_users({})
-
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "").strip()
+        username = request.form["username"].strip()
+        password = request.form["password"].strip()
 
         users = load_users()
-        if username in users and users[username] == password:
+        # support both legacy and new structures
+        user = users.get(username)
+        if isinstance(user, dict):
+            stored = user.get("password", "")
+        else:
+            stored = user if isinstance(user, str) else ""
+
+        if username in users and stored == password:
+            # ensure normalized user structure
+            users = ensure_user(users, username)
+            users[username]["password"] = password
+            save_users(users)
             session["username"] = username
             return redirect(url_for("home"))
         else:
-            # Render template with an error message (your login.html supports {{ error }})
             return render_template("login.html", error="Invalid username or password")
-    # GET
     return render_template("login.html")
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "").strip()
-
-        if not username or not password:
-            return render_template("signup.html", error="Username and password are required")
+        username = request.form["username"].strip()
+        password = request.form["password"].strip()
 
         users = load_users()
         if username in users:
             return render_template("signup.html", error="Username already exists")
 
-        users[username] = password
+        users = ensure_user(users, username)
+        users[username]["password"] = password
         save_users(users)
         session["username"] = username
         return redirect(url_for("home"))
@@ -174,96 +347,51 @@ def logout():
 @app.route("/suggest_book", methods=["POST"])
 @login_required
 def suggest_book():
-    """
-    Accepts: JSON { "mood": "..." }
-    Returns:
-        {
-          "books_text": "<raw model text>",
-          "books": [  // if we managed to parse JSON
-             {"title": "...", "author": "...", "genre": "...", "reason": "..."} , x3
-          ]
-        }
-    """
     data = request.get_json(silent=True) or {}
     mood = (data.get("mood") or "").strip()
-
     if not mood:
         return jsonify({"error": "Mood not provided"}), 400
 
-    # Prompt updated to request strict JSON, so shelves.html can parse it reliably.
-    prompt = f"""
-You are a creative and diverse mood-based book recommender.
-
-User's mood: "{mood.upper()}"
-
-Rules:
-1) The mood MUST strongly influence the choice of books (tone, genre, themes must fit).
-2) DO NOT recommend any of these banned titles (exact match or obvious variants):
-   {", ".join(BANNED_TITLES)}.
-3) Recommend exactly 3 lesser-known (not bestselling) books, varied in style, setting, or author.
-4) The books must be reasonably available in India (but do not include purchase links here).
-5) OUTPUT FORMAT: Return ONLY valid JSON (no prose, no markdown, no code fences).
-   The JSON must be an object with a single key "recommendations" that is an array of 3 items.
-   Each item MUST have the keys: "title", "author", "genre", "reason".
-   Example:
-   {{
-     "recommendations": [
-       {{
-         "title": "…",
-         "author": "…",
-         "genre": "…",
-         "reason": "1–2 sentences explaining why it matches the mood"
-       }},
-       ...
-     ]
-   }}
-
-If you can't follow the rules, still output your best effort as JSON in that exact structure.
-"""
-
-    headers = {"Content-Type": "application/json"}
-    body = {"contents": [{"parts": [{"text": prompt}]}]}
-
     try:
-        resp = requests.post(f"{GEMINI_URL}?key={API_KEY}", headers=headers, json=body, timeout=45)
+        books = gemini_recommend(mood)  # list of 3 dicts
+
+        # Save immediately to shelves for this user
+        users = load_users()
+        users = ensure_user(users, session["username"])
+        entry = {
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "mood": mood,
+            "books": books,
+            "id": int(datetime.now().timestamp() * 1000)
+        }
+        users[session["username"]]["shelves"].insert(0, entry)
+        users[session["username"]]["shelves"] = users[session["username"]]["shelves"][:50]
+        save_users(users)
+
+        # Create plain text display
+        lines = []
+        for i, b in enumerate(books, 1):
+            lines.append(f"{i}. {b['title']} — {b['author']} [{b.get('genre','')}]")
+            if b.get("description"):
+                lines.append(f"   {b['description']}")
+        books_text = "\n".join(lines)
+
+        return jsonify({
+            "books_text": books_text,
+            "saved": True,
+            "shelf": entry
+        })
     except Exception as e:
-        return jsonify({"error": f"Upstream model request failed: {e}"}), 502
+        # Return error and raw output in message so frontend can display for debugging
+        return jsonify({"error": str(e)}), 500
 
-    try:
-        data = resp.json()
-    except Exception:
-        return jsonify({"error": "Model returned a non-JSON response"}), 502
-
-    if resp.status_code != 200 or "candidates" not in data:
-        return jsonify({"error": "Failed to get recommendations"}), 502
-
-    # Raw text from the model (backwards compatible with your existing index.html)
-    try:
-        books_text = data["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception:
-        books_text = ""
-
-    # Try to parse structured JSON so shelves can use it
-    books_json = try_parse_books_json(books_text) or []
-
-    # Hard cap to 3 items if model returned more
-    if isinstance(books_json, list) and len(books_json) > 3:
-        books_json = books_json[:3]
-
-    return jsonify({
-        "books_text": books_text,
-        "books": books_json
-    })
-
-# ---------- Health (optional) ---------- #
-@app.route("/health")
-def health():
-    return jsonify({
-        "ok": True,
-        "time": datetime.utcnow().isoformat() + "Z",
-        "has_api_key": bool(API_KEY)
-    })
+# --- Optional: JSON API to fetch shelves (if you want SPA usage) --- #
+@app.route("/api/shelves")
+@login_required
+def api_shelves():
+    users = load_users()
+    users = ensure_user(users, session["username"])
+    return jsonify({"shelves": users[session["username"]]["shelves"]})
 
 if __name__ == "__main__":
-    # For local testing
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
