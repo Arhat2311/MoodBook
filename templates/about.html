@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About - BookMood</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='cleaned_styles.css') }}">
+    <style>
+        body {
+            background: #0e0e0e; /* Dark background */
+            color: #fff; /* White text by default */
+        }
+
+        /* Gradient name */
+        .creator-name {
+            font-size: 2.8rem;
+            font-weight: 900;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: none;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Profile image styling */
+        .profile-image {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 4px solid rgba(255,255,255,0.3);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+            margin: 0 auto 1rem;
+        }
+        .profile-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* About content box */
+        .about-content {
+            background: rgba(20, 20, 20, 0.85); /* Dark semi-transparent */
+            padding: 2rem;
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            margin-top: 2rem;
+        }
+
+        /* Section title */
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 1rem;
+        }
+
+        /* Back button styling */
+        .back-to-home {
+            display: inline-block;
+            padding: 0.8rem 1.5rem;
+            background: #222;
+            color: #fff !important;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 2rem;
+            transition: background 0.3s ease, transform 0.3s ease;
+        }
+        .back-to-home:hover {
+            background: #000;
+            transform: translateY(-2px);
+        }
+
+        /* Tech stack grid */
+        .tech-stack {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .tech-item {
+            background: rgba(255,255,255,0.05);
+            padding: 1rem;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+            text-align: center;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+<!-- Hamburger Menu -->
+<div class="hamburger-container">
+    <button class="hamburger-btn" onclick="toggleMenu()">☰</button>
+    <div id="hamburgerMenu" class="hamburger-menu">
+        <div class="menu-header">
+            👤 {{ username }}
+        </div>
+        <a href="/">Home</a>
+        <a href="/shelves">Shelves</a>
+        <a href="/badges">Badges</a>
+        <a href="/about">About</a>
+        <hr>
+        <a href="/logout" class="logout-btn">🚪 Logout</a>
+    </div>
+</div>
+
+<style>
+    .hamburger-container {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        z-index: 999;
+    }
+    .hamburger-btn {
+        font-size: 24px;
+        background: var(--glass-bg);
+        border: none;
+        border-radius: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+        box-shadow: var(--shadow-primary);
+    }
+    .hamburger-menu {
+        display: none;
+        position: absolute;
+        top: 40px;
+        right: 0;
+        background: var(--glass-bg);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        box-shadow: var(--shadow-primary);
+        padding: 10px;
+        min-width: 180px;
+    }
+    .hamburger-menu a {
+        display: block;
+        padding: 8px;
+        color: white;
+        text-decoration: none;
+        border-radius: 6px;
+    }
+    .hamburger-menu a:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+    .menu-header {
+        padding: 10px;
+        font-weight: bold;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        margin-bottom: 8px;
+    }
+    .logout-btn {
+        color: #ff6b6b !important;
+    }
+</style>
+
+<script>
+    function toggleMenu() {
+        const menu = document.getElementById("hamburgerMenu");
+        menu.style.display = (menu.style.display === "block") ? "none" : "block";
+    }
+    // Close menu if clicked outside
+    document.addEventListener("click", function(event) {
+        const menu = document.getElementById("hamburgerMenu");
+        const btn = document.querySelector(".hamburger-btn");
+        if (!menu.contains(event.target) && !btn.contains(event.target)) {
+            menu.style.display = "none";
+        }
+    });
+</script>
+
+    <!-- Background animation -->
+    <div class="bg-animation">
+        <div class="bg-shape"></div>
+        <div class="bg-shape"></div>
+        <div class="bg-shape"></div>
+    </div>
+
+    <div class="container text-center" style="padding: 3rem 1rem;">
+        <!-- Profile section -->
+        <div class="profile-section">
+            <div class="profile-image">
+                <img src="{{ url_for('static', filename='profile.png') }}" alt="Profile Picture">
+            </div>
+            <h1 class="creator-name">Arhat Chattopadhyay</h1>
+            <p class="creator-title" style="color: #ccc;">Creator of BookMood</p>
+        </div>
+
+        <!-- About content -->
+        <div class="about-content">
+            <h2 class="section-title">About BookMood</h2>
+            <p>
+                Welcome to BookMood! I created this AI-powered book recommendation system to help readers discover their perfect next book based on their current emotional state. Whether you're feeling adventurous, melancholic, or seeking comfort, BookMood analyzes your mood and suggests books that resonate with your feelings.
+            </p>
+            <p>
+                This project combines my passion for literature, technology, and understanding human emotions. Using advanced AI algorithms, BookMood creates personalized reading experiences that go beyond traditional genre-based recommendations.
+            </p>
+
+            <h3 class="section-title">Technology Stack</h3>
+            <div class="tech-stack">
+                <div class="tech-item"><strong>Frontend</strong><br>HTML5, CSS3, JavaScript</div>
+                <div class="tech-item"><strong>Backend</strong><br>Flask/Python</div>
+                <div class="tech-item"><strong>AI/ML</strong><br>Natural Language Processing</div>
+                <div class="tech-item"><strong>Design</strong><br>Responsive UI/UX</div>
+            </div>
+        </div>
+
+        <!-- Contact placeholder -->
+        <div class="about-content" style="margin-top: 2rem;">
+            <h2 class="section-title">Get In Touch</h2>
+            <p style>
+                Contact me via:
+<p style="margin-bottom: 20px;"></p>
+		Mobile: +91 9088816000
+<p style="margin-bottom: 20px;"></p>
+		Email: arhat.chattopadhyay@gmail.com
+<p style="margin-bottom: 20px;"></p>
+                Feel free to reach out for collaborations, feedback, or just to share your favorite book recommendations.
+
+            </p>
+        </div>
+
+        <!-- Back button -->
+        <a href="{{ url_for('home') }}" class="back-to-home">← Back to BookMood</a>
+    </div>
+</body>
+</html>
