@@ -239,14 +239,23 @@ def suggest_book():
         return jsonify({"error": "Mood not provided"}), 400
 
     prompt = f"""
-You are an expert mood-based book recommender.
+You are a creative and diverse mood-based book recommender.
 
-User mood: "{mood}".
+    The user's mood is: {mood.upper()}.
 
-Return a short, friendly list of 3 book recommendations that fit the mood.
-Each recommendation should include Title, Author, Genre and a 1-2 sentence description.
-Avoid these banned titles: {', '.join(BANNED_TITLES)}.
-Prefer books available in India and avoid massively overexposed bestsellers.
+    Instructions:
+    1. The mood MUST strongly influence the choice of books — the genre, tone, and themes must clearly match the mood.
+    2. Avoid any books from this banned list: {', '.join(BANNED_TITLES)}. The book should be clearly available in India
+    3. Give 3 unique and random book recommendations that have not appeared in your previous answer, and are not much known or heard about, definitely not bestsellers.
+    4. Each recommendation should include:
+       - Title
+       - Author
+       - Genre
+       - 1–2 sentence description explaining why it matches the mood.
+    5. Be creative — avoid generic bestsellers unless they perfectly fit the mood.
+    6. Make sure the recommendations are varied in setting, style, or author.
+    7. Suggest a book for me with the following details: 
+
 """
 
     try:
