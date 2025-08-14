@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BookMood - Badges</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='cleaned_styles.css') }}">
+    <style>
+        /* Navigation Bar */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(15, 15, 35, 0.9);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 1rem 0;
+            z-index: 1000;
+        }
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 2rem;
+        }
+        .nav-logo {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-decoration: none;
+        }
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+            position: relative;
+        }
+        .nav-links a:hover,
+        .nav-links a.active {
+            color: var(--text-primary);
+        }
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--primary-gradient);
+            transition: width 0.3s ease;
+        }
+        .nav-links a:hover::after,
+        .nav-links a.active::after {
+            width: 100%;
+        }
+
+        /* Hamburger Menu */
+        .hamburger-container {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 9999;
+        }
+        .hamburger-btn {
+            font-size: 24px;
+            background: rgba(0,0,0,0.6);
+            border: none;
+            border-radius: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            color: white;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .hamburger-btn:hover {
+            background: rgba(255,255,255,0.2);
+            color: #ffdd00;
+        }
+        .hamburger-menu {
+            display: none;
+            position: absolute;
+            top: 40px;
+            right: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+            padding: 10px;
+            min-width: 180px;
+        }
+        .hamburger-menu a {
+            display: block;
+            padding: 8px;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+        }
+        .hamburger-menu a:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        .menu-header {
+            padding: 10px;
+            font-weight: bold;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            margin-bottom: 8px;
+        }
+        .logout-btn {
+            color: #ff6b6b !important;
+        }
+
+        /* Badges Section */
+        .container {
+            padding-top: 100px;
+            max-width: 1200px;
+            margin: auto;
+        }
+        .header h1 {
+            font-size: 2rem;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+        .header p {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .challenge-section, .badges-section, .proud-wall {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-primary);
+        }
+        .challenge-title, .badges-title, .proud-wall-title {
+            font-size: 1.8rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            text-align: center;
+            background: linear-gradient(135deg, var(--text-primary) 0%, #667eea 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .mark-done-btn {
+            display: block;
+            margin: auto;
+            margin-top: 1rem;
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            font-weight: 700;
+            background: var(--secondary-gradient);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+        }
+
+        /* Badge display grid */
+        .badges-container, .proud-wall-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .badge-item {
+            background: var(--glass-bg);
+            border-radius: 16px;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .badge-emoji {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        .badge-name {
+            font-weight: 600;
+        }
+
+        /* Rank colors for Proud Wall */
+        .bronze { background: #cd7f32; color: white; }
+        .silver { background: #c0c0c0; color: black; }
+        .gold { background: #ffd700; color: black; }
+        .diamond { background: #b9f2ff; color: black; }
+        .platinum { background: #e5e4e2; color: black; }
+
+        @media (max-width:768px){
+            .nav-container { flex-direction: column; gap: 1rem; }
+            body { padding-top: 120px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Hamburger Menu -->
+<div class="hamburger-container">
+    <button class="hamburger-btn" onclick="toggleMenu()">☰</button>
+    <div id="hamburgerMenu" class="hamburger-menu">
+        <div class="menu-header">👤 {{ username }}</div>
+        <a href="/">Home</a>
+        <a href="/shelves">Shelves</a>
+        <a href="/badges" class="active">Badges</a>
+        <a href="/about">About</a>
+        <hr>
+        <a href="/logout" class="logout-btn">🚪 Logout</a>
+    </div>
+</div>
+
+<nav class="navbar">
+    <div class="nav-container">
+        <a href="/" class="nav-logo">📚 BookMood</a>
+        <div class="nav-links">
+            <a href="/">Home</a>
+            <a href="/shelves">Shelves</a>
+            <a href="/badges" class="active">Badges</a>
+            <a href="/about">About</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="header">
+        <h1>🏅 Achievement Badges</h1>
+        <p>Complete challenges to unlock badges and see them in your Proud Wall!</p>
+    </div>
+
+    <!-- Challenge Section -->
+    <div class="challenge-section">
+        <h2 class="challenge-title">🎯 Today's Challenge</h2>
+        <p id="challenge-text"></p>
+        <button class="mark-done-btn" onclick="markDone()">✨ Mark as Complete</button>
+    </div>
+
+    <!-- Badges Section -->
+    <div class="badges-section">
+        <h2 class="badges-title">🏆 Proud Wall</h2>
+        <div id="badges" class="badges-container"></div>
+    </div>
+
+    <!-- Proud Wall -->
+    <div class="proud-wall">
+        <h2 class="proud-wall-title">🌟 Proud Wall</h2>
+        <div id="proudWall" class="proud-wall-container"></div>
+    </div>
+</div>
+
+<script>
+    /* Hamburger menu toggle */
+    function toggleMenu() {
+        const menu = document.getElementById("hamburgerMenu");
+        menu.style.display = (menu.style.display === "block") ? "none" : "block";
+    }
+    document.addEventListener("click", function(event){
+        const menu = document.getElementById("hamburgerMenu");
+        const btn = document.querySelector(".hamburger-btn");
+        if(!menu.contains(event.target) && !btn.contains(event.target)){
+            menu.style.display = "none";
+        }
+    });
+
+    // Badge & challenge system
+    const challenges = {
+        "Monday": {text: "Read 10 pages", badge: "📚 Book Worm"},
+        "Tuesday": {text: "Read a short story", badge: "📖 Story Lover"},
+        "Wednesday": {text: "Try a new genre", badge: "🌟 Explorer"},
+        "Thursday": {text: "Read before bed", badge: "🌙 Night Reader"},
+        "Friday": {text: "Read 20 pages", badge: "📚 Advanced Reader"},
+        "Saturday": {text: "Review a book", badge: "📝 Critic"},
+        "Sunday": {text: "Finish a book", badge: "🏆 Master Reader"}
+    };
+
+    let userBadges = JSON.parse(localStorage.getItem("userBadges") || "[]");
+
+    function getTodayChallenge() {
+        const day = new Date().toLocaleDateString('en-US', {weekday: 'long'});
+        return challenges[day] || challenges["Monday"];
+    }
+
+    function initializeChallenge() {
+        const challenge = getTodayChallenge();
+        document.getElementById("challenge-text").innerText = challenge.text;
+    }
+
+    function markDone() {
+        const challenge = getTodayChallenge();
+        // Count existing badge copies
+        let existing = userBadges.filter(b => b.name === challenge.badge);
+        let rank = "bronze";
+        if(existing.length >= 3 && existing.length < 8) rank="silver";
+        if(existing.length >= 8 && existing.length < 13) rank="gold";
+        if(existing.length >=13 && existing.length <18) rank="diamond";
+        if(existing.length >=18) rank="platinum";
+
+        const newBadge = {
+            name: challenge.badge,
+            earnedDate: new Date().toLocaleString(),
+            rank: rank
+        };
+        userBadges.push(newBadge);
+        localStorage.setItem("userBadges", JSON.stringify(userBadges));
+        loadBadges();
+        loadProudWall();
+        initializeChallenge();
+    }
+
+    function loadBadges() {
+        const container = document.getElementById("badges");
+        if(userBadges.length===0){
+            container.innerHTML="<p>No badges earned yet. Complete challenges to start!</p>";
+        } else {
+            container.innerHTML = userBadges.map(b=>{
+                return `<div class="badge-item ${b.rank}"><span class="badge-emoji">${b.name.split(' ')[0]}</span><div class="badge-name">${b.name}</div></div>`;
+            }).join('');
+        }
+    }
+
+    function loadProudWall(){
+        const wall = document.getElementById("proudWall");
+        if(userBadges.length===0){
+            wall.innerHTML="<p>No badges yet.</p>";
+        } else {
+            wall.innerHTML = userBadges.map(b=>{
+                return `<div class="badge-item ${b.rank}"><span class="badge-emoji">${b.name.split(' ')[0]}</span><div class="badge-name">${b.name} (${b.rank.toUpperCase()})</div></div>`;
+            }).join('');
+        }
+    }
+
+    window.addEventListener('load', function(){
+        initializeChallenge();
+        loadBadges();
+        loadProudWall();
+    });
+</script>
+</body>
+</html>

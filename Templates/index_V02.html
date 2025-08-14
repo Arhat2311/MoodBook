@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mood Book Recommendation Demo</title>
+  <!-- Link to external CSS in static folder -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📚 BookMood</h1>
+      <p>Discover your perfect read based on how you're feeling</p>
+    </div>
+    
+    <div class="content">
+      <div class="input-section">
+        <label class="input-label">Tell me your mood</label>
+        <div class="input-group">
+          <input id="mood" class="mood-input" placeholder="e.g., happy, sad, adventurous" />
+          <button class="get-book-btn" onclick="getRecommendation()">Get Book</button>
+        </div>
+      </div>
+      
+      <div class="loading" id="loadingIndicator">
+        <div class="spinner"></div>
+        <div class="loading-text">Finding perfect books for your mood...</div>
+      </div>
+      
+      <div id="result" class="results"></div>
+    </div>
+  </div>
+
+  <script>
+    async function getRecommendation() {
+      const mood = document.getElementById('mood').value.trim().toLowerCase();
+      if (!mood) {
+        alert('Please enter a mood!');
+        return;
+      }
+      
+      // Show loading indicator
+      const loadingIndicator = document.getElementById('loadingIndicator');
+      const resultDiv = document.getElementById('result');
+      const button = document.querySelector('.get-book-btn');
+      
+      loadingIndicator.classList.add('show');
+      resultDiv.classList.remove('show');
+      button.disabled = true;
+      
+      try {
+        const res = await fetch('/suggest_book', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mood }),
+        });
+        const data = await res.json();
+        
+        // Hide loading indicator
+        loadingIndicator.classList.remove('show');
+        button.disabled = false;
+        
+        if (data.books_text) {
+          document.getElementById('result').innerHTML = `
+            <div class="mood-display">Books for mood: <span>${mood}</span></div>
+            <div class="book-content">
+              <pre class="book-list-pre">${data.books_text}</pre>
+            </div>
+          `;
+          resultDiv.classList.add('show');
+        } else if (data.error) {
+          document.getElementById('result').innerHTML = `
+            <div class="error-message show">Error: ${data.error}</div>
+          `;
+          resultDiv.classList.add('show');
+        } else {
+          document.getElementById('result').innerHTML = `
+            <div class="error-message show">No books found.</div>
+          `;
+          resultDiv.classList.add('show');
+        }
+      } catch (error) {
+        // Hide loading indicator on error
+        loadingIndicator.classList.remove('show');
+        button.disabled = false;
+        document.getElementById('result').innerHTML = `
+          <div class="error-message show">Error: Failed to fetch recommendations.</div>
+        `;
+        resultDiv.classList.add('show');
+      }
+    }
+    
+    // Allow Enter key to trigger search
+    document.getElementById('mood').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        getRecommendation();
+      }
+    });
+  </script>
+</body>
+</html>
