@@ -12,7 +12,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "super_secret_key_123")  # change in production
 
 # Gemini settings
-API_KEY = os.environ.get("GEMINI_API_KEY", "")  # set in Render / environment for deployment
+API_KEY = os.environ.get("GEMINI_API_KEY",)  # set in Render / environment for deployment
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
 # Database file
@@ -293,4 +293,5 @@ def api_shelves():
 if __name__ == "__main__":
     # for local dev you can set GEMINI_API_KEY in env or leave blank (Gemini calls will fail)
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
+
 
